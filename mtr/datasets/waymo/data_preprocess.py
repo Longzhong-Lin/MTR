@@ -11,6 +11,7 @@ import tensorflow as tf
 import multiprocessing
 import glob
 from tqdm import tqdm
+from concurrent import futures
 from waymo_open_dataset.protos import scenario_pb2
 from waymo_types import object_type, lane_type, road_line_type, road_edge_type, signal_state, polyline_type
 
@@ -114,6 +115,7 @@ def decode_map_features_from_proto(map_features):
             cur_polyline = np.array([point.x, point.y, point.z, 0, 0, 0, global_type]).reshape(1, 7)
 
             map_infos['stop_sign'].append(cur_info)
+        
         elif cur_data.crosswalk.ByteSize() > 0:
             global_type = polyline_type['TYPE_CROSSWALK']
             cur_polyline = np.stack([np.array([point.x, point.y, point.z, global_type]) for point in cur_data.crosswalk.polygon], axis=0)
@@ -221,37 +223,40 @@ def get_infos_from_protos(data_path, output_path=None, num_workers=8):
     src_files.sort()
 
     # func(src_files[0])
-    with multiprocessing.Pool(num_workers) as p:
-        data_infos = list(tqdm(p.imap(func, src_files), total=len(src_files)))
+    # with multiprocessing.Pool(num_workers) as p:
+    #     data_infos = list(tqdm(p.imap(func, src_files), total=len(src_files)))
+    with futures.ThreadPoolExecutor(num_workers) as executor:
+        data_infos = executor.map(func, src_files)
+        data_infos = list(tqdm(data_infos, total=len(src_files)))
 
     all_infos = [item for infos in data_infos for item in infos]
     return all_infos
 
 
-def create_infos_from_protos(raw_data_path, output_path, num_workers=16):
-    train_infos = get_infos_from_protos(
-        data_path=os.path.join(raw_data_path, 'training'),
-        output_path=os.path.join(output_path, 'processed_scenarios_training'),
+def create_infos_from_protos(raw_data_path, output_path, split, num_workers=16):
+    infos = get_infos_from_protos(
+        data_path=os.path.join(raw_data_path, split),
+        output_path=os.path.join(output_path, f'processed_scenarios_{split}'),
         num_workers=num_workers
     )
-    train_filename = os.path.join(output_path, 'processed_scenarios_training_infos.pkl')
-    with open(train_filename, 'wb') as f:
-        pickle.dump(train_infos, f)
-    print('----------------Waymo info train file is saved to %s----------------' % train_filename)
+    filename = os.path.join(output_path, f'processed_scenarios_{split}_infos.pkl')
+    with open(filename, 'wb') as f:
+        pickle.dump(infos, f)
+    print('----------------Waymo info train file is saved to %s----------------' % filename)
 
-    val_infos = get_infos_from_protos(
-        data_path=os.path.join(raw_data_path, 'validation'),
-        output_path=os.path.join(output_path, 'processed_scenarios_validation'),
-        num_workers=num_workers
-    )
-    val_filename = os.path.join(output_path, 'processed_scenarios_val_infos.pkl')
-    with open(val_filename, 'wb') as f:
-        pickle.dump(val_infos, f)
-    print('----------------Waymo info val file is saved to %s----------------' % val_filename)
-    
 
 if __name__ == '__main__':
+    
     create_infos_from_protos(
         raw_data_path=sys.argv[1],
-        output_path=sys.argv[2]
+        output_path=sys.argv[2],
+        split="training",
+        num_workers=16,
+    )
+    
+    create_infos_from_protos(
+        raw_data_path=sys.argv[1],
+        output_path=sys.argv[2],
+        split="validation",
+        num_workers=16,
     )

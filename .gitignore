@@ -3,7 +3,7 @@
 *.so
 *.npz
 *.stat
-output/
+output
 **build**
 data/
 **egg-info**
