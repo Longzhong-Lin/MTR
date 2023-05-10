@@ -357,8 +357,9 @@ class MTRDecoder(nn.Module):
             pred_list.append([pred_scores, pred_trajs])
 
             # update
-            pred_waypoints = pred_trajs[:, :, :, 0:2]
-            dynamic_query_center = pred_trajs[:, :, -1, 0:2].contiguous().permute(1, 0, 2)  # (num_query, num_center_objects, 2)
+            # BUG pred_waypoints & dynamic_query_center should be detached, but this makes no difference
+            pred_waypoints = pred_trajs.detach().clone()[:, :, :, 0:2]
+            dynamic_query_center = pred_trajs.detach().clone()[:, :, -1, 0:2].contiguous().permute(1, 0, 2)  # (num_query, num_center_objects, 2)
 
         if self.use_place_holder:
             raise NotImplementedError
